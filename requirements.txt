@@ -1,0 +1,11 @@
+xarray
+netcdf4
+matplotlib
+numpy
+pandas
+geopandas
+s3fs
+boto3
+botocore
+opencv-python
+iso3166
