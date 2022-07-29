@@ -14,29 +14,38 @@ import iso3166
 import os
 import time
 
+import sys; sys.path.append("..")
+import settings
+
 #################
 # User settings #
 #################
+# population
 country = "USA"
-
-data_dir_fb = "./data/fb/registered"
-pop = xr.open_dataset(os.path.join(data_dir_fb, f"pop_{country}.nc"))
+data_dir_pop = settings.data_dir_pop_reg
+pop = xr.open_dataset(os.path.join(data_dir_pop, f"pop_{country}.nc"))
 pop = pop['population'].data.flatten()
 pop_min = 0
 mask = [pop > pop_min]
-
+# air quality
 fn ='PM25.nc'
-data_dir_silam = f"./data/silam"
+data_dir_pol = settings.data_dir_pol
 cat = fn.split(".")[0]
 i = 0
-sub_dirs_silam = os.listdir(data_dir_silam)
-path_pol = os.path.join(data_dir_silam, sub_dirs_silam[i], fn)
+sub_dirs_pol = os.listdir(data_dir_pol)
+if "agg" in sub_dirs_pol:
+    sub_dirs_pol.remove("agg")
+path_pol = os.path.join(data_dir_pol, sub_dirs_pol[i], fn)
 pol = xr.open_dataset(path_pol)
 pol = pol[cat].mean('time').data.flatten()
-
+# remove where pop below threshold
 pop = pop[mask]
 pol = pol[mask]
 
+#############
+# Histogram #
+#############
+# create histogram bins
 pop_bins = np.concatenate([
     np.arange(pop_min, 1e+3, 1e+3),
     np.arange(1e+3, 1e+4, 1e+3),
@@ -84,7 +93,7 @@ ax.set_title(title, fontsize=10)
 formatter = LogFormatter(10, labelOnlyBase=False)
 fig.colorbar(im, ax=ax, format=formatter)
 plt.show()
-fig.savefig(f"hist_{country}.png")
+fig.savefig(os.path.join(settings.dir_output, f"hist_{country}.png"))
 plt.close("all")
 import pdb; pdb.set_trace();
 

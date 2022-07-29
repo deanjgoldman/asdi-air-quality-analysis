@@ -13,10 +13,13 @@ import copy
 import os
 import time
 
+import sys; sys.path.append("..")
+import settings
+
 #################
 # User settings #
 #################
-data_dir = "./data"
+data_dir = settings.data_dir
 pop_settings = {
     "pop_min": 1,              # filter out values less than pop_min 
     "countries": [             # countries to compare
@@ -35,12 +38,13 @@ pol_settings = {
     "date_end": "20220705",    # aggregate pollution date start
 }
 
+os.makedirs(settings.dir_output, exist_ok=True)
 lab_countries = "_".join(pop_settings["countries"])
 lab_categories = "_".join(pol_settings["categories"])
-plot_save_fp = f'./hist_{lab_countries}_{lab_categories}'
+plot_save_fp = os.path.join(settings.dir_output, f'hist_{lab_countries}_{lab_categories}')
 
 
-# These are the default dimensions that SILAM produces its
+# These are the default dimensions that pol produces its
 # estimates with. Just keeping them as global variables. 
 dims = [897, 1800]
 
@@ -77,10 +81,12 @@ fig, axes = plt.subplots(
 # Load data, plot histograms #
 ##############################
 
-data_dir_fb = os.path.join(data_dir, "fb", "registered")
-data_dir_silam = os.path.join(data_dir, "silam")
-sub_dirs_silam = os.listdir(data_dir_silam)
-sub_dirs_sorted = sorted([int(sub_dir) for sub_dir in sub_dirs_silam])
+data_dir_pop = settings.data_dir_pop_reg
+data_dir_pol = settings.data_dir_pol
+sub_dirs_pol = os.listdir(data_dir_pol)
+if "agg" in sub_dirs_pol:
+    sub_dirs_pol.remove("agg")
+sub_dirs_sorted = sorted([int(sub_dir) for sub_dir in sub_dirs_pol])
 
 def load_population_xr_array(country):
     """
@@ -88,9 +94,9 @@ def load_population_xr_array(country):
     
     arguments 
         -- country: string, three character signifier of country, see
-                    <data_dir_fb> for available countries. 
+                    <data_dir_pop> for available countries. 
     """
-    pop = xr.open_dataset(os.path.join(data_dir_fb, f"pop_{country}.nc"))
+    pop = xr.open_dataset(os.path.join(data_dir_pop, f"pop_{country}.nc"))
     pop = pop['population'].data.flatten()
     return pop
 
@@ -111,8 +117,8 @@ def load_pollution_xr_array(cats, date_start, date_end):
     pol = np.empty((len(sub_dirs_select), np.product(dims)))
     for i, sub_dir in enumerate(sub_dirs_select):
         # get index of sub dir according to date
-        idx = sub_dirs_silam.index(sub_dir)
-        path_pol = os.path.join(data_dir_silam, sub_dirs_silam[idx], fn)
+        idx = sub_dirs_pol.index(sub_dir)
+        path_pol = os.path.join(data_dir_pol, sub_dirs_pol[idx], fn)
         pol_i = xr.open_dataset(path_pol)
         pol_i = pol_i[cat].mean('time').data.flatten()
         pol[i] = pol_i

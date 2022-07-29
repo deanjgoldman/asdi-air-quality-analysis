@@ -8,6 +8,8 @@ import geopandas as gpd
 
 import time
 import subprocess
+from tqdm import tqdm
+import os
 
 import s3fs
 import boto3
@@ -16,44 +18,46 @@ from botocore import UNSIGNED
 from botocore.config import Config
 import gzip
 
-from tqdm import tqdm
-import os
-
+import settings
 
 # directory settings
-dir_output ="./data"
-dir_output_fb = os.path.join(dir_output, "fb")
-os.makedirs(dir_output_fb, exist_ok=True)
-dir_output_silam = os.path.join(dir_output, "silam")
-os.makedirs(dir_output_silam, exist_ok=True)
-
+dir_output = settings.data_dir
+dir_output_pol = settings.dir_output_pol
+dir_output_pop = settings.dir_output_pop
+dir_output_pop_raw = settings.dir_output_pop_raw
+dir_output_pop_reg = settings.dir_output_pop_reg
+os.makedirs(dir_output, exist_ok=True)
+os.makedirs(dir_output_pol, exist_ok=True)
+os.makedirs(dir_output_pop, exist_ok=True)
+os.makedirs(dir_output_pop_raw, exist_ok=True)
+os.makedirs(dir_output_pop_reg, exist_ok=True)
 ###########################
 # ETL pollution estimates #
 ###########################
 print("Running etl: SILAM pollution estimate dataset...")
 
 # code aws paths
-bucket_name_silam = 'fmi-opendata-silam-surface-netcdf'
-path_prefix_silam = 'global'
+bucket_name_pol = 'fmi-opendata-silam-surface-netcdf'
+path_prefix_pol = 'global'
 # query s3 bucket
-cmd = f"aws s3 ls --no-sign-request s3://{bucket_name_silam}/{path_prefix_silam}/"
+cmd = f"aws s3 ls --no-sign-request s3://{bucket_name_pol}/{path_prefix_pol}/"
 stdout = subprocess.check_output([cmd], shell=True)
 # parse results for s3 paths to read
-rows_silam = stdout.decode().split("\n")
-sub_dirs_silam  = [each.strip().split("PRE ")[1][:-1] for each in rows_silam if "PRE" in each]
+rows_pol = stdout.decode().split("\n")
+sub_dirs_pol  = [each.strip().split("PRE ")[1][:-1] for each in rows_pol if "PRE" in each]
 # instantiate s3fs client
 fs = s3fs.S3FileSystem(anon=True)
 
-if len(os.listdir(dir_output_silam)) != len(sub_dirs_silam):
+if len(os.listdir(dir_output_pol)) != len(sub_dirs_pol):
 	pol = {}
-	for date in tqdm(sub_dirs_silam):
+	for date in tqdm(sub_dirs_pol):
 
-		dir_output_silam_date = f"{dir_output_silam}/{date}"
-		os.makedirs(dir_output_silam_date, exist_ok=True)
+		dir_output_pol_date = os.path.join(dir_output_pol, date)
+		os.makedirs(dir_output_pol_date, exist_ok=True)
 
 		pol_date = {}
 
-		cmd = f"aws s3 ls --no-sign-request s3://{bucket_name_silam}/{path_prefix_silam}/{date}/"
+		cmd = f"aws s3 ls --no-sign-request s3://{bucket_name_pol}/{path_prefix_pol}/{date}/"
 		stdout = subprocess.check_output([cmd], shell=True)
 		rows_pol = stdout.decode().split("\n")
 		rows_pol = [each.split(" ")[-1] for each in rows_pol]
@@ -67,24 +71,24 @@ if len(os.listdir(dir_output_silam)) != len(sub_dirs_silam):
 				continue
 
 			cat = split[-2]
-			path_pol = f'{bucket_name_silam}/{path_prefix_silam}/{date}/{fn}'
-			path_pol_dst = f"{dir_output_silam_date}/{cat}.nc"
+			path_pol_src = f'{bucket_name_pol}/{path_prefix_pol}/{date}/{fn}'
+			path_pol_dst = os.path.join(dir_output_pol_date, f"{cat}.nc")
 
 			# skip if data already exists
 			if os.path.exists(path_pol_dst):
 				continue
 
-			with fs.open(path_pol, 'rb') as f:
-				ds = xr.open_dataset(f)
+			with fs.open(path_pol_src, 'rb') as f:
+				pol_ds = xr.open_dataset(f)
 				
 				pol_date[cat] = path_pol_dst
-				ds.to_netcdf(path_pol_dst)
+				pol_ds.to_netcdf(path_pol_dst)
 
 		pol[date] = pol_date
 else:
 	print("SILAM data collected, loading dataset for registration...")
 	# grab any complete dataset to use
-	pol_ds = xr.open_dataset("./data/silam/20220628/CO.nc")
+	pol_ds = xr.open_dataset(os.path.join(dir_output_pol, sub_dirs_pol[0], "CO.nc"))
 
 ########################
 # Lat lon registration #
@@ -188,21 +192,21 @@ def register_lat_lon(df, chunk_size=1e+5):
 print("Running etl: Meta population density dataset...")
 
 # meta dataforgood aws path 
-bucket_name_fb = 'dataforgood-fb-data'
+bucket_name_pop = 'dataforgood-fb-data'
 # set path prefix, at the time of writing, meta has only added one month so far
 # but this could potentially be updated to month={this year}-{this month}
-path_prefix_fb = 'csv/month=2019-06'
+path_prefix_pop = 'csv/month=2019-06'
 # aws cli command
-cmd = f'aws s3 ls --no-sign-request s3://{bucket_name_fb}/{path_prefix_fb}/'
+cmd = f'aws s3 ls --no-sign-request s3://{bucket_name_pop}/{path_prefix_pop}/'
 # query s3 bucket, return results
 stdout = subprocess.check_output([cmd], shell=True)
 # parse results for s3 paths to read
-rows_fb = stdout.decode().split("\n")
+rows_pop = stdout.decode().split("\n")
 # iterating through country sub dirs, organize dataset by country
-sub_dirs_fb  = [each.strip().split("PRE ")[1][:-1] \
-				for each in rows_fb if "=" in each]
+sub_dirs_pop  = [each.strip().split("PRE ")[1][:-1] \
+				for each in rows_pop if "=" in each]
 countries = [each.split("=")[1].split("/")[0] \
-			 for each in rows_fb if "=" in each]  
+			 for each in rows_pop if "=" in each]  
 
 # set up list for world pop estimate
 pop_countries = []
@@ -210,26 +214,28 @@ pop_countries = []
 # s3 client
 s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
 
-for i, country in enumerate(countries):
+for i, country in tqdm(enumerate(countries), total=len(countries)):
 
 	# template meta's filename convention
 	fn = f"{country}_total_population.csv.gz"
-	key = os.path.join(path_prefix_fb, sub_dirs_fb[i], "type=total_population", fn)
+	key = os.path.join(path_prefix_pop, sub_dirs_pop[i], "type=total_population", fn)
 	# destination filepath
-	dst = os.path.join(dir_output_fb, "registered", f"pop_{country}.nc")
+	dst = os.path.join(dir_output_pop_reg, f"pop_{country}.nc")
+	if os.path.exists(dst):
+		continue
 
 	try:
-		obj = s3.get_object(Bucket=bucket_name_fb, Key=key)
+		obj = s3.get_object(Bucket=bucket_name_pop, Key=key)
 	except:
 		print(f'Not found {key}')
 		continue
 
 	# once data is pulled down, load local file
-	local_dst = os.path.join(dir_output_fb, "raw", fn)
+	local_dst = os.path.join(dir_output_pop_raw, fn)
 	if os.path.exists(local_dst):
 		pass
 	else:
-		cmd = f'aws s3 cp --no-sign-request s3://{bucket_name_fb}/{key} {local_dst}'
+		cmd = f'aws s3 cp --no-sign-request s3://{bucket_name_pop}/{key} {local_dst}'
 		stdout = subprocess.check_output([cmd], shell=True)
 
 	# USA dataset is larger, requires registration in chunks
@@ -237,7 +243,7 @@ for i, country in enumerate(countries):
 		pop_country = pd.DataFrame([])
 		reader = pd.read_csv(local_dst, compression="gzip", sep="\t", chunksize=1e+5)
 		for chunk in reader:
-			pop_country = register_chunk(chunk, pop_country)
+			pop_country = register_lat_lon_chunks(chunk, pop_country)
 	else:
 		# read file, register lat lon, clean data
 		pop_country = pd.read_csv(local_dst, compression="gzip", sep="\t")
@@ -260,5 +266,5 @@ for i, country in enumerate(countries):
 	pop = pop.groupby(["lat", "lon"]).agg({"population": "sum"}).reset_index()
 
 # Write complete file to netcdf and csv
-pop.to_csv(os.path.join(dir_output_fb, "pop.csv"))
-pop.set_index(['lat', 'lon']).to_xarray().fillna(1e-6).to_netcdf(os.path.join(dir_output_fb, "pop.nc"))
+pop.to_csv(os.path.join(dir_output_pop, "pop.csv"))
+pop.set_index(['lat', 'lon']).to_xarray().fillna(1e-6).to_netcdf(os.path.join(dir_output_pop, "pop.nc"))

@@ -9,30 +9,33 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import copy
+import sys
 import os
 import time
 
+sys.path.append("..")
+import settings
 
 # open pollution dataset
-fn ='CO.nc'
-data_dir_silam = f"./data/silam"
-cat = fn.split(".")[0]
-sub_dirs_silam = os.listdir(data_dir_silam)
-if "agg" in sub_dirs_silam:
-    sub_dirs_silam.remove("agg")
+cat = sys.argv[1]
+fn =f'{cat}.nc'
+data_dir_pol = settings.data_dir_pol
+sub_dirs_pol = os.listdir(data_dir_pol)
+if "agg" in sub_dirs_pol:
+    sub_dirs_pol.remove("agg")
 # Load fp of aggregate pollution data, otherwise
 # build aggregate pollution dataset and save
-dir_agg = os.path.join(data_dir_silam, "agg")
+dir_agg = os.path.join(data_dir_pol, "agg")
 os.makedirs(dir_agg, exist_ok=True)
 fp_agg = os.path.join(dir_agg, f"pol_agg_{cat}.nc")
 if os.path.exists(fp_agg):
     pol = xr.open_dataset(fp_agg)
 else:
     # open an initial xr dataset to use xarray's format
-    pol = xr.open_dataset(os.path.join(data_dir_silam, sub_dirs_silam[0], fn))
+    pol = xr.open_dataset(os.path.join(data_dir_pol, sub_dirs_pol[0], fn))
     pols = []
-    for i in range(len(sub_dirs_silam)):
-        path_pol = os.path.join(data_dir_silam, sub_dirs_silam[i], fn)
+    for i in range(len(sub_dirs_pol)):
+        path_pol = os.path.join(data_dir_pol, sub_dirs_pol[i], fn)
         pol = xr.open_dataset(path_pol)
         pols.append(pol)
     days = list(range(len(pols)))
@@ -56,8 +59,9 @@ def divergence(f):
 div = divergence(pol[cat])
 pol['divergence'] = (('lat', 'lon'), div)
 
-# open population dataset
-pop = xr.open_dataset(os.path.join("./data/fb/pop.nc"))
+# open collated population dataset
+data_dir_pop = settings.data_dir_pop
+pop = xr.open_dataset(os.path.join(data_dir_pop, "pop.nc"))
 pop = pop.sortby(["lat", "lon"])
 
 # plot population

@@ -13,6 +13,9 @@ import sys
 import os
 import time
 
+sys.path.append("..")
+import settings
+
 mol_weight = { # molecular weights pulled from google search
     "CO": 28.01,
     "NO2": 46.0055,
@@ -33,17 +36,19 @@ health_threshold = {
 
 cat = sys.argv[1]
 fn = f'{cat}.nc'
-data_dir_silam = f"./data/silam"
-sub_dirs_silam = os.listdir(data_dir_silam)
-path_pol = os.path.join(data_dir_silam, sub_dirs_silam[0], fn)
+data_dir_pol = settings.data_dir_pol
+sub_dirs_pol = os.listdir(data_dir_pol)
+if "agg" in sub_dirs_pol:
+    sub_dirs_pol.remove("agg")
+path_pol = os.path.join(data_dir_pol, sub_dirs_pol[0], fn)
 pol = xr.open_dataset(path_pol)
 prev = pol[cat][0].data[..., None]
 prev = prev.astype(np.uint8)
 
 
 pols = []
-for i in range(len(sub_dirs_silam)):
-    path_pol = os.path.join(data_dir_silam, sub_dirs_silam[i], fn)
+for i in range(len(sub_dirs_pol)):
+    path_pol = os.path.join(data_dir_pol, sub_dirs_pol[i], fn)
     pol = xr.open_dataset(path_pol)
     pols.append(pol)
 
@@ -65,7 +70,8 @@ if cat in mol_weight.keys():
 else:
     units = "ug/m3"
 
-pop = xr.open_dataset(os.path.join("./data/fb/pop_reg.nc"))
+data_dir_pop = settings.data_dir_pop
+pop = xr.open_dataset(os.path.join(data_dir_pop, "pop.nc"))
 pop = pop.sortby(["lat", "lon"])
 pop = pop['population'].data
 
@@ -103,7 +109,7 @@ ax.annotate(note_estimate, (xpos, ypos+0.1), bbox={"boxstyle": "square", "fc": "
 ax.grid()
 
 title = f"Cumulative Frequency Distribution of Population with Pollution ({cat}) {units}"
-title += "\n(y-axis represents proportion of pop. with {units} >= x-axis coordinate)"
+title += "\n(y-axis represents proportion of pop. with "+units+" >= x-axis coordinate)"
 fig.suptitle(title)
 plt.show()
 plt.close('all')
