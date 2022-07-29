@@ -44,50 +44,54 @@ sub_dirs_silam  = [each.strip().split("PRE ")[1][:-1] for each in rows_silam if 
 # instantiate s3fs client
 fs = s3fs.S3FileSystem(anon=True)
 
-pol = {}
-for date in tqdm(sub_dirs_silam):
+if len(os.listdir(dir_output_silam)) != len(sub_dirs_silam):
+	pol = {}
+	for date in tqdm(sub_dirs_silam):
 
-	dir_output_silam_date = f"{dir_output_silam}/{date}"
-	os.makedirs(dir_output_silam_date, exist_ok=True)
+		dir_output_silam_date = f"{dir_output_silam}/{date}"
+		os.makedirs(dir_output_silam_date, exist_ok=True)
 
-	pol_date = {}
+		pol_date = {}
 
-	cmd = f"aws s3 ls --no-sign-request s3://{bucket_name_silam}/{path_prefix_silam}/{date}/"
-	stdout = subprocess.check_output([cmd], shell=True)
-	rows_pol = stdout.decode().split("\n")
-	rows_pol = [each.split(" ")[-1] for each in rows_pol]
-	# organize paths by category
-	per_cat = {}
-	for fn in rows_pol:
-		split = fn.split("_")
+		cmd = f"aws s3 ls --no-sign-request s3://{bucket_name_silam}/{path_prefix_silam}/{date}/"
+		stdout = subprocess.check_output([cmd], shell=True)
+		rows_pol = stdout.decode().split("\n")
+		rows_pol = [each.split(" ")[-1] for each in rows_pol]
+		# organize paths by category
+		per_cat = {}
+		for fn in rows_pol:
+			split = fn.split("_")
 
-		# just grab the first day for now
-		if not "d0" in split[-1]:
-			continue
+			# just grab the first day for now
+			if not "d0" in split[-1]:
+				continue
 
-		cat = split[-2]
-		path_pol = f'{bucket_name_silam}/{path_prefix_silam}/{date}/{fn}'
-		path_pol_dst = f"{dir_output_silam_date}/{cat}.nc"
+			cat = split[-2]
+			path_pol = f'{bucket_name_silam}/{path_prefix_silam}/{date}/{fn}'
+			path_pol_dst = f"{dir_output_silam_date}/{cat}.nc"
 
-		# skip if data already exists
-		if os.path.exists(path_pol_dst):
-			continue
+			# skip if data already exists
+			if os.path.exists(path_pol_dst):
+				continue
 
-		with fs.open(path_pol, 'rb') as f:
-			ds = xr.open_dataset(f)
-			
-			pol_date[cat] = path_pol_dst
-			ds.to_netcdf(path_pol_dst)
+			with fs.open(path_pol, 'rb') as f:
+				ds = xr.open_dataset(f)
+				
+				pol_date[cat] = path_pol_dst
+				ds.to_netcdf(path_pol_dst)
 
-	pol[date] = pol_date
-
+		pol[date] = pol_date
+else:
+	print("SILAM data collected, loading dataset for registration...")
+	# grab any complete dataset to use
+	pol_ds = xr.open_dataset("./data/silam/20220628/CO.nc")
 
 ########################
 # Lat lon registration #
 ########################
 # requires at least one pollution dataset `pol[date]` in memory
 
-def register_lat_lon_chunks(chunk, df, pol_ds):
+def register_lat_lon_chunks(chunk, df):
 	"""
 	Align Meta population data with SILAM pollution data.
 	For all points in Meta datasets coordinate space, find the
@@ -131,7 +135,7 @@ def register_lat_lon_chunks(chunk, df, pol_ds):
 
 	return df 
 
-def register_lat_lon(df, pol_ds, chunk_size=1e+5):
+def register_lat_lon(df, chunk_size=1e+5):
 	"""
 	Align Meta population data with SILAM pollution data.
 	For all points in Meta datasets coordinate space, find the
