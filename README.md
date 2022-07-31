@@ -1,4 +1,4 @@
-# ASDI Air Quality Analysis
+# ASDI AQ View
 This repository supports a pipeline for:
 1. Downloading and merging two datasets
 - SILAM Air Quality Dataset provided by: Finnish Meteorological Institute [1]
