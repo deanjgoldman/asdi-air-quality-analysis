@@ -12,27 +12,20 @@ import copy
 import os
 import time
 
+import sys; sys.path.append("..")
+import settings
 
-# params for ShiTomasi corner detection
-feature_params = dict(
-    maxCorners=150,
-    qualityLevel=0.2,
-    minDistance=5,
-    blockSize=50)
 
-# Parameters for lucas kanade optical flow
-lk_params = dict(
-    winSize=(15, 15),
-    maxLevel=2,
-    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 
 minmax = lambda x: (x - x.min()) / (x.max() - x.min())
 
-fn ='CO.nc'
-data_dir_silam = f"./data/silam"
-cat = fn.split(".")[0]
-sub_dirs_silam = os.listdir(data_dir_silam)
-path_pol = os.path.join(data_dir_silam, sub_dirs_silam[0], fn)
+cat = sys.argv[1]
+fn =f'{cat}.nc'
+data_dir_pol = settings.data_dir_pol
+sub_dirs_pol = os.listdir(data_dir_pol)
+if "agg" in sub_dirs_pol:
+    sub_dirs_pol.remove("agg")
+path_pol = os.path.join(data_dir_pol, sub_dirs_pol[0], fn)
 pol = xr.open_dataset(path_pol)
 prev = pol[cat][0].data[..., None]
 
@@ -43,16 +36,16 @@ color = np.random.randint(0, 255, (100000, 3))
 mask = np.zeros_like(prev)
 
 pols = []
-for i in range(len(sub_dirs_silam)):
-    path_pol = os.path.join(data_dir_silam, sub_dirs_silam[i], fn)
+for i in range(len(sub_dirs_pol)):
+    path_pol = os.path.join(data_dir_pol, sub_dirs_pol[i], fn)
     pol = xr.open_dataset(path_pol)
     pols.append(pol)
 
 def divergence(f):
     return np.ufunc.reduce(np.add, np.gradient(f, 15))
 
-# import pdb; pdb.set_trace();
-# traverse backward through time
+data_dir_pop = settings.data_dir_pop
+
 days = list(range(len(pols)))[::-1]
 hours = list(range(24))[::-1]
 for i in days:
@@ -67,7 +60,7 @@ for i in days:
 
         # fig, ax = plt.subplots()
 
-        pop = xr.open_dataset(os.path.join("./data/fb/pop_reg.nc"))
+        pop = xr.open_dataset(os.path.join(data_dir_pop, "pop.nc"))
         pop = pop.sortby(["lat", "lon"])
         wmap = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
  
